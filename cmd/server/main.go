@@ -26,6 +26,19 @@ func main() {
 	defer AMQPConnection.Close()
 	defer fmt.Println("Peril server is shutting down...")
 
+	game_logs_channel, game_logs_queue, err := pubsub.DeclareAndBind(
+		AMQPConnection,
+		routing.ExchangePerilTopic,
+		routing.GameLogSlug,
+		routing.GameLogSlug+".*",
+		pubsub.SimpleQueueDurable,
+	)
+	if err != nil {
+		panic(err)
+	}
+	defer game_logs_channel.Close()
+	fmt.Printf("Queue %v declared and bound to %v\n", game_logs_queue.Name, routing.GameLogSlug+".*")
+
 	gamelogic.PrintServerHelp()
 
 	for {
