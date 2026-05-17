@@ -16,6 +16,13 @@ func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
 	}
 }
 
+func handlerMove(gs *gamelogic.GameState) func(gamelogic.ArmyMove) {
+	return func(move gamelogic.ArmyMove) {
+		defer fmt.Print("> ")
+		gs.HandleMove(move)
+	}
+}
+
 func main() {
 	connectionString := "amqp://guest:guest@localhost:5672/"
 	AMQPConnection, err := amqp.Dial(connectionString)
@@ -31,6 +38,12 @@ func main() {
 	}
 
 	gameState := gamelogic.NewGameState(username)
+
+	publishCh, err := AMQPConnection.Channel()
+	if err != nil {
+		panic(err)
+	}
+
 	pubsub.SubscribeJSON(
 		AMQPConnection,
 		routing.ExchangePerilDirect,
@@ -38,6 +51,14 @@ func main() {
 		routing.PauseKey,
 		pubsub.SimpleQueueTransient,
 		handlerPause(gameState),
+	)
+	pubsub.SubscribeJSON(
+		AMQPConnection,
+		routing.ExchangePerilTopic,
+		routing.ArmyMovesPrefix+"."+username,
+		routing.ArmyMovesPrefix+".*",
+		pubsub.SimpleQueueTransient,
+		handlerMove(gameState),
 	)
 
 	for {
@@ -53,11 +74,21 @@ func main() {
 				fmt.Printf("error: %v\n", err)
 			}
 		case "move":
-			_, err := gameState.CommandMove(words)
+			move, err := gameState.CommandMove(words)
 			if err != nil {
 				fmt.Printf("error: %v\n", err)
 			} else {
-				fmt.Println("Move successful!")
+				err := pubsub.PublishJSON(
+					publishCh,
+					routing.ExchangePerilTopic,
+					routing.ArmyMovesPrefix+"."+username,
+					move,
+				)
+				if err != nil {
+					fmt.Printf("error publishing move: %v\n", err)
+				} else {
+					fmt.Println("Move successful!")
+				}
 			}
 		case "status":
 			gameState.CommandStatus()
