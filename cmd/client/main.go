@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -38,7 +36,38 @@ func main() {
 	defer channel.Close()
 	fmt.Printf("Queue %v declared and bound to %v\n", queue.Name, routing.PauseKey)
 
-	// Wait for user input to exit
-	fmt.Println("Press Enter to exit...")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	gameState := gamelogic.NewGameState(username)
+
+	for {
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+
+		switch words[0] {
+		case "spawn":
+			err := gameState.CommandSpawn(words)
+			if err != nil {
+				fmt.Printf("error: %v\n", err)
+			}
+		case "move":
+			_, err := gameState.CommandMove(words)
+			if err != nil {
+				fmt.Printf("error: %v\n", err)
+			} else {
+				fmt.Println("Move successful!")
+			}
+		case "status":
+			gameState.CommandStatus()
+		case "help":
+			gamelogic.PrintClientHelp()
+		case "spam":
+			fmt.Println("Spamming not allowed yet!")
+		case "quit":
+			gamelogic.PrintQuit()
+			return
+		default:
+			fmt.Println("unrecognized command")
+		}
+	}
 }
