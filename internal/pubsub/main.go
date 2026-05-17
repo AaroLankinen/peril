@@ -57,6 +57,10 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 
 }
 
+/*
+funcSubscribeJSON is a helper function that combines DeclareAndBind and Consume to subscribe to messages of a specific type from a RabbitMQ exchange.
+It takes a handler function that will be called with the deserialized message value whenever a new message is received.
+*/
 func SubscribeJSON[T any](
 	conn *amqp.Connection,
 	exchange,
@@ -70,7 +74,7 @@ func SubscribeJSON[T any](
 		return err
 	}
 
-	msgs, err := ch.Consume(queue.Name, "", true, false, false, false, nil)
+	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
