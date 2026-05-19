@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -100,6 +102,63 @@ func SubscribeJSON[T any](
 			err := json.Unmarshal(msg.Body, &val)
 			if err != nil {
 				// If unmarshaling fails, NackDiscard the message as it's likely malformed
+				msg.Nack(false, false)
+				return // Skip processing this message
+			}
+			ackType := handler(val)
+			switch ackType {
+			case Ack:
+				msg.Ack(false)
+			case NackRequeue:
+				msg.Nack(false, true) // Requeue the message
+			case NackDiscard:
+				msg.Nack(false, false) // Discard the message
+			}
+		}
+	}()
+
+	return nil
+}
+
+func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(val)
+	if err != nil {
+		return err
+	}
+	return ch.PublishWithContext(context.Background(), exchange, key, false, false, amqp.Publishing{
+		ContentType: "application/gob",
+		Body:        buf.Bytes(),
+	})
+}
+
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	ch, queue, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+	if err != nil {
+		return err
+	}
+
+	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for msg := range msgs {
+			var val T
+			buf := bytes.NewBuffer(msg.Body)
+			dec := gob.NewDecoder(buf)
+			err := dec.Decode(&val)
+			if err != nil {
+				// If decoding fails, NackDiscard the message as it's likely malformed
 				msg.Nack(false, false)
 				return // Skip processing this message
 			}
