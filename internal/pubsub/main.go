@@ -14,6 +14,16 @@ const (
 	SimpleQueueTransient
 )
 
+type AckType int
+
+const (
+	Ack AckType = iota
+	NackRequeue
+	NackDiscard
+)
+
+const DeadLetterExchange = "peril_dlx"
+
 func DeclareAndBind(
 	conn *amqp.Connection,
 	exchange,
@@ -32,7 +42,7 @@ func DeclareAndBind(
 		simpleQueueType == SimpleQueueTransient, // autoDelete
 		simpleQueueType == SimpleQueueTransient, // exclusive
 		false,                                   // noWait
-		nil,                                     // args
+		amqp.Table{"x-dead-letter-exchange": DeadLetterExchange}, // args
 	)
 	if err != nil {
 		return nil, amqp.Queue{}, err
@@ -66,14 +76,19 @@ func SubscribeJSON[T any](
 	exchange,
 	queueName,
 	key string,
-	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
-	handler func(T),
+	queueType SimpleQueueType,
+	handler func(T) AckType,
 ) error {
 	ch, queue, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
 		return err
 	}
 
+	// Ensure the channel is closed when the function exits, or when the goroutine finishes
+	// This defer should ideally be inside the goroutine if the channel is exclusive to the consumer,
+	// but for simplicity and common patterns, it's often placed here if the channel is shared or managed by the caller.
+	// For a single consumer per channel, closing it when the consumer stops is good practice.
+	// However, for this specific use case, the channel is passed in, so it's up to the caller to close it.
 	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
@@ -84,10 +99,19 @@ func SubscribeJSON[T any](
 			var val T
 			err := json.Unmarshal(msg.Body, &val)
 			if err != nil {
-				continue
+				// If unmarshaling fails, NackDiscard the message as it's likely malformed
+				msg.Nack(false, false)
+				return // Skip processing this message
 			}
-			handler(val)
-			msg.Ack(false)
+			ackType := handler(val)
+			switch ackType {
+			case Ack:
+				msg.Ack(false)
+			case NackRequeue:
+				msg.Nack(false, true) // Requeue the message
+			case NackDiscard:
+				msg.Nack(false, false) // Discard the message
+			}
 		}
 	}()
 
