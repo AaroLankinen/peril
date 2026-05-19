@@ -9,6 +9,17 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+func handlerLog() func(routing.GameLog) pubsub.AckType {
+	return func(gl routing.GameLog) pubsub.AckType {
+		defer fmt.Print("> ")
+		err := gamelogic.WriteLog(gl)
+		if err != nil {
+			return pubsub.NackRequeue
+		}
+		return pubsub.Ack
+	}
+}
+
 func main() {
 	connectionString := "amqp://guest:guest@localhost:5672/"
 	fmt.Println("Starting Peril server...")
@@ -26,18 +37,17 @@ func main() {
 	defer AMQPConnection.Close()
 	defer fmt.Println("Peril server is shutting down...")
 
-	game_logs_channel, game_logs_queue, err := pubsub.DeclareAndBind(
+	err := pubsub.SubscribeGob(
 		AMQPConnection,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
 		routing.GameLogSlug+".*",
 		pubsub.SimpleQueueDurable,
+		handlerLog(),
 	)
 	if err != nil {
 		panic(err)
 	}
-	defer game_logs_channel.Close()
-	fmt.Printf("Queue %v declared and bound to %v\n", game_logs_queue.Name, routing.GameLogSlug+".*")
 
 	gamelogic.PrintServerHelp()
 
