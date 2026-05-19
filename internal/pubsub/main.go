@@ -9,24 +9,36 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+// SimpleQueueType defines if a queue is durable or transient/exclusive.
 type SimpleQueueType int
 
 const (
+	// SimpleQueueDurable is a shared, persistent queue.
 	SimpleQueueDurable SimpleQueueType = iota
+	// SimpleQueueTransient is an exclusive, auto-delete queue.
 	SimpleQueueTransient
 )
 
+// AckType represents the acknowledgement action for a consumed message.
 type AckType int
 
 const (
+	// Ack acknowledges the message, removing it from the queue.
 	Ack AckType = iota
+	// NackRequeue negatively acknowledges the message and puts it back on the queue.
 	NackRequeue
+	// NackDiscard negatively acknowledges the message and discards it (or sends to DLX).
 	NackDiscard
 )
 
+// DeadLetterExchange is the name of the exchange for discarded messages.
 const DeadLetterExchange = "peril_dlx"
+
+// PrefetchCount limits the number of unacknowledged messages on a channel.
 const PrefetchCount = 100
 
+// DeclareAndBind is a helper that creates a channel, declares a queue with the
+// specified properties, and binds it to an exchange with a routing key.
 func DeclareAndBind(
 	conn *amqp.Connection,
 	exchange,
@@ -58,6 +70,7 @@ func DeclareAndBind(
 	return ch, queue, nil
 }
 
+// PublishJSON marshals a value to JSON and publishes it to the specified exchange and key.
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	valAsBytes, err := json.Marshal(val)
 	if err != nil {
@@ -70,10 +83,9 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 
 }
 
-/*
-funcSubscribeJSON is a helper function that combines DeclareAndBind and Consume to subscribe to messages of a specific type from a RabbitMQ exchange.
-It takes a handler function that will be called with the deserialized message value whenever a new message is received.
-*/
+// SubscribeJSON is a helper function that combines DeclareAndBind and Consume to
+// subscribe to JSON messages. It runs the consumer in a background goroutine
+// and executes the handler for each message.
 func SubscribeJSON[T any](
 	conn *amqp.Connection,
 	exchange,
@@ -122,6 +134,7 @@ func SubscribeJSON[T any](
 	return nil
 }
 
+// PublishGob serializes a value using GOB and publishes it to the specified exchange and key.
 func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -135,6 +148,9 @@ func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	})
 }
 
+// SubscribeGob is a helper function that combines DeclareAndBind and Consume to
+// subscribe to GOB messages. It runs the consumer in a background goroutine
+// and executes the handler for each message.
 func SubscribeGob[T any](
 	conn *amqp.Connection,
 	exchange,

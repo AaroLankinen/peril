@@ -1,3 +1,6 @@
+// Package main for the client represents a player in the game.
+// It handles user input for spawning and moving units, reacts to
+// game events like wars, and communicates state changes via RabbitMQ.
 package main
 
 import (

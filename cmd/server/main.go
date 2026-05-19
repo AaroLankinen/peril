@@ -1,3 +1,6 @@
+// Package main for the server acts as the game orchestrator.
+// It manages global game state such as pausing/resuming and
+// acts as a centralized logger for all client events.
 package main
 
 import (
