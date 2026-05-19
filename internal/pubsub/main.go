@@ -25,6 +25,7 @@ const (
 )
 
 const DeadLetterExchange = "peril_dlx"
+const PrefetchCount = 100
 
 func DeclareAndBind(
 	conn *amqp.Connection,
@@ -91,6 +92,7 @@ func SubscribeJSON[T any](
 	// but for simplicity and common patterns, it's often placed here if the channel is shared or managed by the caller.
 	// For a single consumer per channel, closing it when the consumer stops is good practice.
 	// However, for this specific use case, the channel is passed in, so it's up to the caller to close it.
+	ch.Qos(PrefetchCount, 0, true) // Adjust the prefetch count as needed
 	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
@@ -146,6 +148,7 @@ func SubscribeGob[T any](
 		return err
 	}
 
+	ch.Qos(PrefetchCount, 0, true) // Adjust the prefetch count as needed
 	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
